@@ -48,7 +48,7 @@ If you seem to miss samples you can increase that value.
 The results are as follows:
 Caller Function, from filename:line -> Callee Function, from filename:line : number of captures, number of cycles, number of instructions
 Where the number of cycles and instructions are from [xtensa performance counters](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/perfmon.html).
-The function names that are specified as hex addresses (i.e. `0x4000bd83 ??:0`) are ROM functions, it is possible to decode which function it is by going through the ROM functions, for example in ESP32, you can look up the functions in the [ld folder](https://github.com/espressif/esp-idf/tree/master/components/esp_rom/esp32/ld).
+The function names that are specified as hex addresses (i.e. `0x4000bd83 ??:0`) are ROM functions, it is possible to decode which function it is by going through the ROM functions, for example in ESP32, you can look up the functions in the [ld folder](https://github.com/espressif/esp-idf/tree/master/components/esp_rom/esp32/ld) or use the [ROM ELFs](https://github.com/espressif/esp-rom-elfs/releases) from Espressif.
 ```bash
 $ pio run -e debug -t analyze
 Analysing sprof.out
