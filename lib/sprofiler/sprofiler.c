@@ -9,6 +9,10 @@
 #include <esp_debug_helpers.h>
 #include <errno.h>
 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
+#include <esp_cpu_utils.h>
+#endif
+
 #include "esp32_perfmon.h"
 
 static const char *TAG = "sprofiler";
@@ -249,7 +253,11 @@ void sprofiler_initialize(uint32_t samples_per_second)
     // initialize task to flush profiling data out and flush on each write
     ESP_LOGI(TAG, "Initializing SProfiler...");
 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    esp_err_t ret = esp_vfs_semihost_register("/host");
+#else
     esp_err_t ret = esp_vfs_semihost_register("/host", NULL);
+#endif
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Failed to register semihost driver (%s)!", esp_err_to_name(ret));
