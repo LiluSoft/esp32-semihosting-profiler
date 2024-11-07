@@ -168,26 +168,34 @@ void initializeProfilerTimer(void *parameter)
     BaseType_t current_core_id = xPortGetCoreID();
 
 #if SPROFILTER_USE_GPTIMER
-    /*
+    gptimer_handle_t gptimer = NULL;
+
     gptimer_config_t timer_config = {
             .clk_src = GPTIMER_CLK_SRC_DEFAULT,
             .direction = GPTIMER_COUNT_UP,
-            .resolution_hz = hz, // 1MHz, 1 tick=1us
+            .resolution_hz = 80000000 / TIMER_DIVIDER,
+            .intr_priority = 3, // GPTIMER_ALLOW_INTR_PRIORITY_MASK
+            .flags =  {.intr_shared = 0},
     };
     ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &gptimer));
 
     gptimer_event_callbacks_t cbs = {
             .on_alarm = timer_group_isr_callback,
     };
-    ESP_ERROR_CHECK(gptimer_register_event_callbacks(gptimer, &cbs, this));
-
+    ESP_ERROR_CHECK(gptimer_register_event_callbacks(gptimer, &cbs, NULL));
+    
     ESP_ERROR_CHECK(gptimer_enable(gptimer));
+
+    uint64_t alarm = 80000000 / TIMER_DIVIDER / profiler_header.samples_per_second;
     gptimer_alarm_config_t alarm_config1 = {
-            .alarm_count = 1, // period = 1/hz
+            .alarm_count = alarm, // 80,000,000 APB Clock / 8,000 TIMER_DIVIDER / 10 times per second
             .reload_count = 0,
             .flags = {.auto_reload_on_alarm = 1},
     };
-    ESP_ERROR_CHECK(gptimer_set_alarm_action(gptimer, &alarm_config1));*/
+    ESP_ERROR_CHECK(gptimer_set_alarm_action(gptimer, &alarm_config1));
+
+    ESP_ERROR_CHECK(gptimer_start(gptimer));
+
 #else
     timer_config_t config = {};
     config.divider = TIMER_DIVIDER;
