@@ -163,7 +163,7 @@ static bool __attribute__((optimize("O0"))) IRAM_ATTR timer_group_isr_callback(v
     return false;
 }
 
-void initializeProfilerTimer(void *parameter)
+void initializeProfilerTimer(void *)
 {
     BaseType_t current_core_id = xPortGetCoreID();
 
@@ -321,10 +321,10 @@ void sprofiler_initialize(uint32_t samples_per_second)
     perfmon_init();
     perfmon_reset();
 
-    xTaskCreatePinnedToCore(initializeProfilerTimer, "prof0", 1024, 0, configMAX_PRIORITIES - 1, NULL, 0);
+    xTaskCreatePinnedToCore(initializeProfilerTimer, "prof0", 1024, NULL, configMAX_PRIORITIES - 1, NULL, 0);
 
 #ifndef CONFIG_FREERTOS_UNICORE
-    xTaskCreatePinnedToCore(initializeProfilerTimer, "prof1", 1024, 1, configMAX_PRIORITIES - 1, NULL, 1);
+    xTaskCreatePinnedToCore(initializeProfilerTimer, "prof1", 1024, NULL, configMAX_PRIORITIES - 1, NULL, 1);
 #endif
 
     // create flush task
