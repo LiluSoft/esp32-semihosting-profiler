@@ -1,7 +1,6 @@
 #include "sprofiler.h"
 #include <stdbool.h>
 
-#include <driver/timer.h>
 #include <esp_vfs_semihost.h>
 #include <esp_err.h>
 #include <esp_log.h>
@@ -9,8 +8,16 @@
 #include <esp_debug_helpers.h>
 #include <errno.h>
 
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0) && !SPROFILTER_USE_GPTIMER
+#define SPROFILTER_USE_GPTIMER 1
+#endif
+
+
+#if SPROFILTER_USE_GPTIMER
 #include <esp_cpu_utils.h>
+#include <driver/gptimer.h>
+#else
+#include <driver/timer.h>
 #endif
 
 #include "esp32_perfmon.h"
@@ -143,7 +150,11 @@ static void __attribute__((optimize("O0"))) IRAM_ATTR drill_stack(esp_backtrace_
     }
 }
 
+#if SPROFILTER_USE_GPTIMER
+static bool __attribute__((optimize("O0"))) IRAM_ATTR timer_group_isr_callback(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_ctx)
+#else
 static bool __attribute__((optimize("O0"))) IRAM_ATTR timer_group_isr_callback(void *args)
+#endif
 {
     esp_backtrace_frame_t start = {0};
     esp_backtrace_get_start(&(start.pc), &(start.sp), &(start.next_pc));
@@ -152,10 +163,40 @@ static bool __attribute__((optimize("O0"))) IRAM_ATTR timer_group_isr_callback(v
     return false;
 }
 
-void initializeProfilerTimer(void *parameter)
+void initializeProfilerTimer(void *)
 {
     BaseType_t current_core_id = xPortGetCoreID();
 
+#if SPROFILTER_USE_GPTIMER
+    gptimer_handle_t gptimer = NULL;
+
+    gptimer_config_t timer_config = {
+            .clk_src = GPTIMER_CLK_SRC_DEFAULT,
+            .direction = GPTIMER_COUNT_UP,
+            .resolution_hz = 80000000 / TIMER_DIVIDER,
+            .intr_priority = 3, // GPTIMER_ALLOW_INTR_PRIORITY_MASK
+            .flags =  {.intr_shared = 0},
+    };
+    ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &gptimer));
+
+    gptimer_event_callbacks_t cbs = {
+            .on_alarm = timer_group_isr_callback,
+    };
+    ESP_ERROR_CHECK(gptimer_register_event_callbacks(gptimer, &cbs, NULL));
+    
+    ESP_ERROR_CHECK(gptimer_enable(gptimer));
+
+    uint64_t alarm = 80000000 / TIMER_DIVIDER / profiler_header.samples_per_second;
+    gptimer_alarm_config_t alarm_config1 = {
+            .alarm_count = alarm, // 80,000,000 APB Clock / 8,000 TIMER_DIVIDER / 10 times per second
+            .reload_count = 0,
+            .flags = {.auto_reload_on_alarm = 1},
+    };
+    ESP_ERROR_CHECK(gptimer_set_alarm_action(gptimer, &alarm_config1));
+
+    ESP_ERROR_CHECK(gptimer_start(gptimer));
+
+#else
     timer_config_t config = {};
     config.divider = TIMER_DIVIDER;
     config.counter_dir = TIMER_COUNT_UP;
@@ -177,6 +218,7 @@ void initializeProfilerTimer(void *parameter)
     timer_isr_callback_add(TIMER_GROUP_0, current_core_id, timer_group_isr_callback, NULL, 0);
 
     timer_start(TIMER_GROUP_0, current_core_id);
+#endif
 
     vTaskDelete(NULL);
 }
@@ -279,10 +321,10 @@ void sprofiler_initialize(uint32_t samples_per_second)
     perfmon_init();
     perfmon_reset();
 
-    xTaskCreatePinnedToCore(initializeProfilerTimer, "prof0", 1024, 0, configMAX_PRIORITIES - 1, NULL, 0);
+    xTaskCreatePinnedToCore(initializeProfilerTimer, "prof0", 1024, NULL, configMAX_PRIORITIES - 1, NULL, 0);
 
 #ifndef CONFIG_FREERTOS_UNICORE
-    xTaskCreatePinnedToCore(initializeProfilerTimer, "prof1", 1024, 1, configMAX_PRIORITIES - 1, NULL, 1);
+    xTaskCreatePinnedToCore(initializeProfilerTimer, "prof1", 1024, NULL, configMAX_PRIORITIES - 1, NULL, 1);
 #endif
 
     // create flush task
